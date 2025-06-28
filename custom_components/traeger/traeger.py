@@ -21,7 +21,7 @@ import socket
 import logging
 import async_timeout
 import aiohttp
-import homeassistant.const
+from homeassistant.const import UnitOfTemperature
 
 
 CLIENT_ID = "2fuohjtqv1e63dckp5v84rau0j"
@@ -279,7 +279,7 @@ class traeger:
 
     def get_settings_for_device(self, thingName):
         if thingName not in self.grill_status:
-            return None
+            return None1
         return self.grill_status[thingName]["settings"]
 
     def get_features_for_device(self, thingName):
@@ -295,11 +295,11 @@ class traeger:
     def get_units_for_device(self, thingName):
         state = self.get_state_for_device(thingName)
         if state is None:
-            return homeassistant.const.TEMP_FAHRENHEIT
+            return UnitOfTemperature.FAHRENHEIT
         if state["units"] == 0:
-            return homeassistant.const.TEMP_CELSIUS
+            return UnitOfTemperature.CELSIUS``
         else:
-            return homeassistant.const.TEMP_FAHRENHEIT
+            return UnitOfTemperature.FAHRENHEIT
 
     def get_details_for_accessory(self, thingName, accessory_id):
         state = self.get_state_for_device(thingName)
