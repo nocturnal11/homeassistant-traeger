@@ -1,18 +1,14 @@
 {
   "domain": "traeger",
   "name": "Traeger",
-  "documentation": "https://github.com/sebirdman/hass_traeger",
-  "issue_tracker": "https://github.com/sebirdman/hass_traeger/issues",
+  "documentation": "https://github.com/nocturnal11/homeassistant-traeger",
+  "issue_tracker": "https://github.com/nocturnal11/homeassistant-traeger/issues",
   "iot_class": "cloud_push",
   "dependencies": [],
   "config_flow": true,
   "codeowners": [
-    "@sebirdman",
-    "@Velines",
-    "@krbaker",
-    "@stephenpapierski",
-    "@njobrien1006"
+    "@nocturnal11"
     ],
   "requirements": [],
-  "version": "2021.09.20"
+  "version": "2025.06.01"
 }
