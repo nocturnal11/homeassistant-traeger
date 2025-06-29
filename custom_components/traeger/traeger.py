@@ -279,7 +279,7 @@ class traeger:
 
     def get_settings_for_device(self, thingName):
         if thingName not in self.grill_status:
-            return None1
+            return None
         return self.grill_status[thingName]["settings"]
 
     def get_features_for_device(self, thingName):
