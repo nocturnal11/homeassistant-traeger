@@ -227,7 +227,9 @@ class traeger:
             if grill_id in self.grill_status:
                 del self.grill_status[grill_id]
             #self.update_state(grill_id)
-            self.hass.async_create_task(self.update_state(grill_id))
+            self.hass.loop.call_soon_threadsafe(
+                lambda: self.hass.async_create_task(self.update_state(grill_id))
+            )
     def mqtt_onmessage(self, client, userdata, message):
         _LOGGER.debug("grill_message: message.topic = %s, message.payload = %s", message.topic, message.payload)
         _LOGGER.info(f"Token Time Remaining:{self.token_remaining()} MQTT Time Remaining:{self.mqtt_url_remaining()}")
