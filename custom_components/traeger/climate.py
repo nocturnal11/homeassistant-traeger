@@ -2,6 +2,7 @@
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
+    PRESET_NONE,
 )
 from homeassistant.components.climate.const import (
     HVACMode,
