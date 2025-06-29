@@ -85,10 +85,7 @@ class TraegerGrillMonitor:
                 if accessory["uuid"] not in self.accessory_status:
                     if self.probe_entity:
                         # FIXED: Use thread-safe call for async_add_devices
-                        async def add_probe_device():
-                            await self.async_add_devices([self.probe_entity(self.client, self.grill_id, accessory["uuid"])])
-
                         self.client.hass.loop.call_soon_threadsafe(
-                            lambda: self.client.hass.async_create_task(add_probe_device())
+                            lambda: self.async_add_devices([self.probe_entity(self.client, self.grill_id, accessory["uuid"])])
                         )
                         self.accessory_status[accessory["uuid"]] = True
