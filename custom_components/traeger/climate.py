@@ -283,7 +283,7 @@ class AccessoryTraegerClimateEntity(TraegerBaseClimate):
     @property
     def supported_features(self):
         """Return the list of supported features for the grill"""
-        return ClimateEntityFeature.TARGET_TEMPERATURE | SUPPORT_PRESET_MODE
+        return ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
 
     # Climate Methods
     async def async_set_temperature(self, **kwargs):
