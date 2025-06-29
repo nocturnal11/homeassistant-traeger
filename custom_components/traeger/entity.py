@@ -1,10 +1,8 @@
 """TraegerBaseEntity class"""
 from homeassistant.helpers.entity import Entity
-
 from .const import DOMAIN, NAME, VERSION, ATTRIBUTION
 
 class TraegerBaseEntity(Entity):
-
     def __init__(self, client, grill_id):
         super().__init__()
         self.grill_id = grill_id
@@ -26,10 +24,8 @@ class TraegerBaseEntity(Entity):
 
     def grill_update_internal(self):
         self.grill_refresh_state()
-
         if self.hass is None:
             return
-
         # Tell HA we have an update
         self.schedule_update_ha_state()
 
@@ -44,14 +40,12 @@ class TraegerBaseEntity(Entity):
 
     @property
     def device_info(self):
-
         if self.grill_settings is None:
             return {
                 "identifiers": {(DOMAIN, self.grill_id)},
                 "name": NAME,
                 "manufacturer": NAME
             }
-
         return {
             "identifiers": {(DOMAIN, self.grill_id)},
             "name": self.grill_details["friendlyName"],
@@ -75,7 +69,6 @@ class TraegerGrillMonitor:
         self.async_add_devices = async_add_devices
         self.probe_entity = probe_entity
         self.accessory_status = {}
-
         self.device_state = self.client.get_state_for_device(self.grill_id)
         self.grill_add_accessories()
         self.client.set_callback_for_grill(self.grill_id, self.grill_monitor_internal)
@@ -91,5 +84,10 @@ class TraegerGrillMonitor:
             if accessory["type"] == "probe":
                 if accessory["uuid"] not in self.accessory_status:
                     if self.probe_entity:
-                        self.async_add_devices([self.probe_entity(self.client, self.grill_id, accessory["uuid"])])
+                        # FIXED: Use thread-safe call for async_add_devices
+                        self.client.hass.loop.call_soon_threadsafe(
+                            lambda: self.client.hass.async_create_task(
+                                self.async_add_devices([self.probe_entity(self.client, self.grill_id, accessory["uuid"])])
+                            )
+                        )
                         self.accessory_status[accessory["uuid"]] = True
