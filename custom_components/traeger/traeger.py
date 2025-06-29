@@ -297,7 +297,7 @@ class traeger:
         if state is None:
             return UnitOfTemperature.FAHRENHEIT
         if state["units"] == 0:
-            return UnitOfTemperature.CELSIUS``
+            return UnitOfTemperature.CELSIUS
         else:
             return UnitOfTemperature.FAHRENHEIT
 
