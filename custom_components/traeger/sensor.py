@@ -55,15 +55,14 @@ class TraegerBaseSensor(TraegerBaseEntity):
 
     @property
     def name(self):
-        """Return the name of the grill"""
-        if self.grill_details is None:
-            return f"{self.grill_id} {self.friendly_name}"
-        name = self.grill_details["friendlyName"]
-        return f"{name} {self.friendly_name}"
+        """Return the name of the sensor"""
+        grill_name = self._get_grill_friendly_name()
+        return f"{grill_name} {self.friendly_name}"
 
     @property
     def unique_id(self):
-        return f"{self.grill_id}_{self.value}"
+        base_id = self._generate_entity_id_base()
+        return f"{base_id}_{self.value}"
 
     # Sensor Properties
     @property
@@ -251,7 +250,10 @@ class ProbeState(TraegerBaseSensor):
     """Probe state sensor with enhanced reliability"""
 
     def __init__(self, client, grill_id, sensor_id):
-        super().__init__(client, grill_id, f"Probe State {sensor_id}", f"probe_state_{sensor_id}")
+        # Generate friendlier probe name
+        probe_name = f"Probe {sensor_id[-4:]} State" if len(sensor_id) > 8 else f"Probe {sensor_id} State"
+        probe_value = f"probe_state_{sensor_id[-4:]}" if len(sensor_id) > 8 else f"probe_state_{sensor_id}"
+        super().__init__(client, grill_id, probe_name, probe_value)
         self.sensor_id = sensor_id
         self.grill_accessory = self.client.get_details_for_accessory(
             self.grill_id, self.sensor_id
@@ -316,7 +318,10 @@ class ProbeState(TraegerBaseSensor):
 
     @property
     def unique_id(self):
-        return f"{self.grill_id}_probe_state_{self.sensor_id}"
+        base_id = self._generate_entity_id_base()
+        # Use last 4 chars of sensor_id for readability
+        probe_suffix = self.sensor_id[-4:] if len(self.sensor_id) > 8 else self.sensor_id
+        return f"{base_id}_probe_state_{probe_suffix}"
 
     @property
     def icon(self):

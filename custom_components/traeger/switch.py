@@ -29,15 +29,14 @@ class TraegerBaseSwitch(SwitchEntity, TraegerBaseEntity):
     # Generic Properties
     @property
     def name(self):
-        """Return the name of the grill"""
-        if self.grill_details is None:
-            return f"{self.grill_id}_{self.devname}"              #Returns EntID
-        name = self.grill_details["friendlyName"]
-        return f"{name} {self.friendly_name}"              #Returns Friendly Name
+        """Return the name of the switch"""
+        grill_name = self._get_grill_friendly_name()
+        return f"{grill_name} {self.friendly_name}"
 
     @property
     def unique_id(self):
-        return f"{self.grill_id}_{self.devname}"                  #SeeminglyDoes Nothing?
+        base_id = self._generate_entity_id_base()
+        return f"{base_id}_{self.devname}"
 
 
 class TraegerConnectEntity(TraegerBaseSwitch):

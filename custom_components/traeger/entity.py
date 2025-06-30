@@ -12,6 +12,7 @@ class TraegerBaseEntity(Entity):
         self.grill_id = grill_id
         self.client = client
         self.grill_refresh_state()
+        self._friendly_name_cache = None
 
     def grill_refresh_state(self):
         self.grill_state = self.client.get_state_for_device(self.grill_id)
@@ -21,6 +22,8 @@ class TraegerBaseEntity(Entity):
         self.grill_settings = self.client.get_settings_for_device(self.grill_id)
         self.grill_limits = self.client.get_limits_for_device(self.grill_id)
         self.grill_cloudconnect = self.client.get_cloudconnect(self.grill_id)
+        # Clear cache when state refreshes
+        self._friendly_name_cache = None
 
     def grill_register_callback(self):
         # Tell the Traeger client to call grill_update() when it gets an update
@@ -33,10 +36,36 @@ class TraegerBaseEntity(Entity):
         # Tell HA we have an update
         self.schedule_update_ha_state()
 
-    @property
-    def unique_id(self):
-        """Return a unique ID to use for this entity."""
-        return self.grill_id
+    def _get_grill_friendly_name(self):
+        """Get user-friendly grill name with proper fallbacks"""
+        if self._friendly_name_cache:
+            return self._friendly_name_cache
+            
+        if (self.grill_details and 
+            isinstance(self.grill_details, dict) and 
+            self.grill_details.get("friendlyName") and
+            self.grill_details["friendlyName"].strip()):
+            friendly_name = self.grill_details["friendlyName"].strip()
+            self._friendly_name_cache = friendly_name
+            return friendly_name
+            
+        # Use last 8 characters of grill_id as fallback for readability
+        short_id = self.grill_id[-8:] if len(self.grill_id) > 8 else self.grill_id
+        fallback_name = f"Traeger {short_id}"
+        self._friendly_name_cache = fallback_name
+        return fallback_name
+    
+    def _generate_entity_id_base(self):
+        """Generate user-friendly base for entity IDs"""
+        grill_name = self._get_grill_friendly_name()
+        # Convert to lowercase, replace spaces with underscores, remove special chars
+        import re
+        clean_name = re.sub(r'[^a-zA-Z0-9\s]', '', grill_name.lower())
+        clean_name = re.sub(r'\s+', '_', clean_name.strip())
+        # Remove 'traeger' prefix if present to avoid redundancy
+        if clean_name.startswith('traeger_'):
+            clean_name = clean_name[8:]
+        return clean_name if clean_name else f"grill_{self.grill_id[-6:]}"
 
     @property
     def should_poll(self):
@@ -44,17 +73,19 @@ class TraegerBaseEntity(Entity):
 
     @property
     def device_info(self):
+        grill_name = self._get_grill_friendly_name()
+        
         if self.grill_settings is None:
             return {
                 "identifiers": {(DOMAIN, self.grill_id)},
-                "name": NAME,
+                "name": grill_name,
                 "manufacturer": NAME
             }
         return {
             "identifiers": {(DOMAIN, self.grill_id)},
-            "name": self.grill_details["friendlyName"],
-            "model": self.grill_settings["device_type_id"],
-            "sw_version": self.grill_settings["fw_version"],
+            "name": grill_name,
+            "model": self.grill_settings.get("device_type_id", "Unknown"),
+            "sw_version": self.grill_settings.get("fw_version", "Unknown"),
             "manufacturer": NAME
         }
 

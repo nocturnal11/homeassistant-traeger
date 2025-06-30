@@ -26,15 +26,15 @@ class TraegerNumberEntity(NumberEntity, TraegerBaseEntity):
     # Generic Properties
     @property
     def name(self):
-        """Return the name of the grill"""
-        if self.grill_details is None:
-            return f"{self.grill_id}_{self.devname}"
-        name = self.grill_details["friendlyName"]
-        return f"{name} {self.devname.capitalize()}"
+        """Return the name of the number entity"""
+        grill_name = self._get_grill_friendly_name()
+        friendly_devname = self.devname.replace('_', ' ').title()
+        return f"{grill_name} {friendly_devname}"
 
     @property
     def unique_id(self):
-        return f"{self.grill_id}_{self.devname}"
+        base_id = self._generate_entity_id_base()
+        return f"{base_id}_{self.devname}"
 
     @property
     def icon(self):
