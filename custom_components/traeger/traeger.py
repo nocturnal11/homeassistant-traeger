@@ -21,6 +21,7 @@ import socket
 import logging
 import async_timeout
 import aiohttp
+import random
 from homeassistant.const import UnitOfTemperature
 
 
@@ -52,6 +53,15 @@ class traeger:
         self.grill_callbacks = {}
         self.mqtt_client_inloop = False
         self.autodisconnect = False
+        # Resilience improvements
+        self.connection_retry_count = 0
+        self.max_retry_attempts = 10
+        self.base_retry_delay = 5  # seconds
+        self.max_retry_delay = 300  # 5 minutes
+        self.last_connection_attempt = 0
+        self.connection_state = "disconnected"  # disconnected, connecting, connected
+        self.consecutive_failures = 0
+        self.last_successful_connection = 0
 
     def token_remaining(self):
         return self.token_expires - time.time()
@@ -157,69 +167,129 @@ class traeger:
         _LOGGER.debug(f"MQTT URL:{self.mqtt_url} Expires @:{self.mqtt_url_expires}")
 
     def _mqtt_connect_func(self):
-        if self.mqtt_client != None:
-            _LOGGER.debug(f"Start MQTT Loop Forever")
+        if self.mqtt_client is not None:
+            _LOGGER.debug("Starting MQTT Loop Forever")
             while self.mqtt_thread_running:
-                self.mqtt_client_inloop = True
-                self.mqtt_client.loop_forever()
-                self.mqtt_client_inloop = False
+                try:
+                    self.mqtt_client_inloop = True
+                    # Use loop_forever with timeout to allow for graceful shutdown
+                    self.mqtt_client.loop_forever(timeout=1.0, retry_first_connection=True)
+                except Exception as e:
+                    _LOGGER.error(f"MQTT loop error: {e}")
+                    if self.mqtt_thread_running:
+                        # Brief pause before retry to prevent tight loop
+                        time.sleep(2)
+                finally:
+                    self.mqtt_client_inloop = False
+                
+                # Wait for URL refresh or thread shutdown
                 while (self.mqtt_url_remaining() < 60 or self.mqtt_thread_refreshing) and self.mqtt_thread_running:
                     time.sleep(1)
-        _LOGGER.debug(f"Should be the end of the thread.")
+                    
+                # If we're exiting due to URL expiry, let main() handle reconnection
+                if self.mqtt_url_remaining() < 60 and self.mqtt_thread_running:
+                    _LOGGER.debug("MQTT loop exiting due to URL expiry")
+                    break
+                    
+        _LOGGER.debug("MQTT thread loop ended")
 
     async def get_mqtt_client(self):
         await self.refresh_mqtt_url()
-        if self.mqtt_client != None:
-            _LOGGER.debug(f"ReInit Client")
-        else:
-            self.mqtt_client = mqtt.Client(transport="websockets")
-            #self.mqtt_client.on_log = self.mqtt_onlog                  #logging passed via enable_logger this would be redundant.
-            self.mqtt_client.on_connect = self.mqtt_onconnect
-            self.mqtt_client.on_connect_fail = self.mqtt_onconnectfail
-            self.mqtt_client.on_subscribe = self.mqtt_onsubscribe
-            self.mqtt_client.on_message = self.mqtt_onmessage
-            if _LOGGER.level <= 10:                                     #Add these callbacks only if our logging is Debug or less.
-                self.mqtt_client.enable_logger(_LOGGER)
-                self.mqtt_client.on_publish = self.mqtt_onpublish       #We dont Publish to MQTT
-                self.mqtt_client.on_unsubscribe = self.mqtt_onunsubscribe
-                self.mqtt_client.on_disconnect = self.mqtt_ondisconnect
-                self.mqtt_client.on_socket_open = self.mqtt_onsocketopen
-                self.mqtt_client.on_socket_close = self.mqtt_onsocketclose
-                self.mqtt_client.on_socket_register_write = self.mqtt_onsocketregisterwrite
-                self.mqtt_client.on_socket_unregister_write = self.mqtt_onsocketunregisterwrite
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
-            self.mqtt_client.tls_set_context(context)
-            self.mqtt_client.reconnect_delay_set(min_delay=10, max_delay=160)
-        mqtt_parts = urllib.parse.urlparse(self.mqtt_url)
-        headers = {
-            "Host": "{0:s}".format(mqtt_parts.netloc),
-        }
-        self.mqtt_client.ws_set_options(path="{}?{}".format(
-        mqtt_parts.path, mqtt_parts.query), headers=headers)     
-        _LOGGER.info(f"Thread Active Count:{threading.active_count()}")
-        self.mqtt_client.connect(mqtt_parts.netloc, 443, keepalive=300)
-        if self.mqtt_thread_running == False:
-            self.mqtt_thread = threading.Thread(target=self._mqtt_connect_func)
-            self.mqtt_thread_running = True
-            self.mqtt_thread.start()
+        
+        # Close existing client if reconnecting
+        if self.mqtt_client is not None:
+            _LOGGER.debug("Reinitializing MQTT client")
+            try:
+                self.mqtt_client.disconnect()
+            except Exception as e:
+                _LOGGER.debug(f"Error disconnecting old client: {e}")
+        
+        self.mqtt_client = mqtt.Client(transport="websockets")
+        self.mqtt_client.on_connect = self.mqtt_onconnect
+        self.mqtt_client.on_connect_fail = self.mqtt_onconnectfail
+        self.mqtt_client.on_subscribe = self.mqtt_onsubscribe
+        self.mqtt_client.on_message = self.mqtt_onmessage
+        self.mqtt_client.on_disconnect = self.mqtt_ondisconnect
+        
+        if _LOGGER.level <= 10:  # Add these callbacks only if our logging is Debug or less.
+            self.mqtt_client.enable_logger(_LOGGER)
+            self.mqtt_client.on_publish = self.mqtt_onpublish
+            self.mqtt_client.on_unsubscribe = self.mqtt_onunsubscribe
+            self.mqtt_client.on_socket_open = self.mqtt_onsocketopen
+            self.mqtt_client.on_socket_close = self.mqtt_onsocketclose
+            self.mqtt_client.on_socket_register_write = self.mqtt_onsocketregisterwrite
+            self.mqtt_client.on_socket_unregister_write = self.mqtt_onsocketunregisterwrite
+            
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        self.mqtt_client.tls_set_context(context)
+        
+        # Enhanced reconnect settings with exponential backoff
+        self.mqtt_client.reconnect_delay_set(min_delay=5, max_delay=120)
+        
+        try:
+            mqtt_parts = urllib.parse.urlparse(self.mqtt_url)
+            headers = {
+                "Host": "{0:s}".format(mqtt_parts.netloc),
+            }
+            self.mqtt_client.ws_set_options(path="{}?{}".format(
+                mqtt_parts.path, mqtt_parts.query), headers=headers)
+            
+            _LOGGER.info(f"Attempting MQTT connection (Thread count: {threading.active_count()})")
+            self.connection_state = "connecting"
+            self.last_connection_attempt = time.time()
+            
+            # Set a shorter keepalive for better detection of connection issues
+            self.mqtt_client.connect(mqtt_parts.netloc, 443, keepalive=120)
+            
+            if not self.mqtt_thread_running:
+                self.mqtt_thread = threading.Thread(target=self._mqtt_connect_func)
+                self.mqtt_thread_running = True
+                self.mqtt_thread.start()
+                
+        except Exception as e:
+            _LOGGER.error(f"Failed to initialize MQTT connection: {e}")
+            self.connection_state = "disconnected"
+            self.consecutive_failures += 1
+            raise
 
 #===========================Paho MQTT Functions=======================================================
     def mqtt_onlog(self, client, userdata, level, buf):
         _LOGGER.debug(f"OnLog Callback. Client:{client} userdata:{userdata} level:{level} buf:{buf}")
     def mqtt_onconnect(self, client, userdata, flags, rc):
-        _LOGGER.info("Grill Connected")
-        for grill in self.grills:
-            grill_id = grill["thingName"]
-            if grill_id in self.grill_status:
-                del self.grill_status[grill_id]
-            client.subscribe(
-                ("prod/thing/update/{}".format(grill_id), 1))
+        if rc == 0:
+            _LOGGER.info("MQTT Grill Connected Successfully")
+            self.connection_state = "connected"
+            self.consecutive_failures = 0
+            self.connection_retry_count = 0
+            self.last_successful_connection = time.time()
+            
+            for grill in self.grills:
+                grill_id = grill["thingName"]
+                if grill_id in self.grill_status:
+                    del self.grill_status[grill_id]
+                client.subscribe(
+                    ("prod/thing/update/{}".format(grill_id), 1))
+        else:
+            _LOGGER.error(f"MQTT connection failed with result code {rc}")
+            self.connection_state = "disconnected"
+            self.consecutive_failures += 1
     def mqtt_onconnectfail(self, client, userdata):
         _LOGGER.debug(f"Connect Fail Callback. Client:{client} userdata:{userdata}")
-        _LOGGER.warning("Grill Connect Failed! MQTT Client Kill.")
-        self.hass.async_create_task(self.kill())                    #Shutdown if we arn't getting anywhere.
+        self.connection_state = "disconnected"
+        self.consecutive_failures += 1
+        
+        if self.consecutive_failures >= self.max_retry_attempts:
+            _LOGGER.error("Max MQTT connection attempts reached. Killing connection.")
+            self.hass.async_create_task(self.kill())
+        else:
+            # Schedule reconnection attempt with exponential backoff
+            retry_delay = min(self.base_retry_delay * (2 ** self.consecutive_failures), self.max_retry_delay)
+            # Add jitter to prevent thundering herd
+            retry_delay += random.uniform(0, retry_delay * 0.1)
+            _LOGGER.warning(f"MQTT connection failed (attempt {self.consecutive_failures}/{self.max_retry_attempts}). Retrying in {retry_delay:.1f} seconds")
+            self.loop.call_later(retry_delay, self._schedule_reconnect)
     def mqtt_onsubscribe(self, client, userdata, mid, granted_qos):
         _LOGGER.debug(f"OnSubscribe Callback. Client:{client} userdata:{userdata} mid:{mid} granted_qos:{granted_qos}")
         for grill in self.grills:
@@ -254,6 +324,17 @@ class traeger:
         _LOGGER.debug(f"OnUnsubscribe Callback. Client:{client} userdata:{userdata} mid:{mid}")
     def mqtt_ondisconnect(self, client, userdata, rc):
         _LOGGER.debug(f"OnDisconnect Callback. Client:{client} userdata:{userdata} rc:{rc}")
+        self.connection_state = "disconnected"
+        
+        if rc != 0:  # Unexpected disconnection
+            _LOGGER.warning(f"Unexpected MQTT disconnection (rc={rc}). Will attempt reconnection.")
+            if self.mqtt_thread_running and not self.mqtt_thread_refreshing:
+                # Schedule reconnection attempt
+                retry_delay = min(self.base_retry_delay * (2 ** self.consecutive_failures), self.max_retry_delay)
+                self.consecutive_failures += 1
+                self.loop.call_later(retry_delay, self._schedule_reconnect)
+        else:
+            _LOGGER.info("MQTT disconnected cleanly")
     def mqtt_onsocketopen(self, client, userdata, sock):
         _LOGGER.debug(f"Sock.Open.Report...Client: {client} UserData: {userdata} Sock: {sock}")
     def mqtt_onsocketclose(self, client, userdata, sock):
@@ -292,7 +373,7 @@ class traeger:
     def get_cloudconnect(self, thingName):
         if thingName not in self.grill_status:
             return False
-        return self.mqtt_thread_running
+        return self.mqtt_thread_running and self.connection_state == "connected"
 
     def get_units_for_device(self, thingName):
         state = self.get_state_for_device(thingName)
@@ -325,13 +406,32 @@ class traeger:
     async def main(self):
         _LOGGER.debug(f"Current Main Loop Time: {time.time()}")
         _LOGGER.debug(f"MQTT Logger Token Time Remaining:{self.token_remaining()} MQTT Time Remaining:{self.mqtt_url_remaining()}")
+        
+        # Check connection health before URL refresh
+        connection_age = time.time() - self.last_successful_connection if self.last_successful_connection > 0 else 0
+        if connection_age > 3600:  # 1 hour
+            _LOGGER.debug("Connection is old, checking health")
+            if self.connection_state != "connected":
+                _LOGGER.warning("Connection appears stale, forcing refresh")
+                await self._force_reconnect()
+        
         if self.mqtt_url_remaining() < 60:
             self.mqtt_thread_refreshing = True
-            if self.mqtt_thread_running:
-                self.mqtt_client.disconnect()
-                self.mqtt_client = None
-            await self.get_mqtt_client()
-            self.mqtt_thread_refreshing = False
+            try:
+                if self.mqtt_thread_running and self.mqtt_client:
+                    _LOGGER.info("Refreshing MQTT connection due to URL expiry")
+                    self.mqtt_client.disconnect()
+                    self.mqtt_client = None
+                await self.get_mqtt_client()
+            except Exception as e:
+                _LOGGER.error(f"Error during MQTT refresh: {e}")
+                # Don't immediately kill on refresh failure, allow retry
+                if self.consecutive_failures >= self.max_retry_attempts:
+                    await self.kill()
+                    return
+            finally:
+                self.mqtt_thread_refreshing = False
+                
         _LOGGER.debug(f"Call_Later @: {self.mqtt_url_expires}")
         delay = self.mqtt_url_remaining()
         if delay < 30:
@@ -340,23 +440,54 @@ class traeger:
 
     async def kill(self):
         if self.mqtt_thread_running:
-            _LOGGER.info(f"Killing Task")
+            _LOGGER.info("Shutting down MQTT connection")
             _LOGGER.debug(f"Task Info: {self.task}")
-            self.task.cancel()
-            _LOGGER.debug(f"Task Info: {self.task} TaskCancelled Status: {self.task.cancelled()}")
-            self.task = None
+            
+            # Cancel the recurring task
+            if self.task:
+                self.task.cancel()
+                _LOGGER.debug(f"Task cancelled: {self.task.cancelled()}")
+                self.task = None
+            
+            # Stop the MQTT thread
             self.mqtt_thread_running = False
-            self.mqtt_client.disconnect()
-            while self.mqtt_client_inloop:                  #Wait for disconnect to finish
+            self.connection_state = "disconnected"
+            
+            # Disconnect MQTT client
+            if self.mqtt_client:
+                try:
+                    self.mqtt_client.disconnect()
+                except Exception as e:
+                    _LOGGER.debug(f"Error disconnecting MQTT client: {e}")
+            
+            # Wait for the thread loop to finish
+            timeout = 10  # seconds
+            while self.mqtt_client_inloop and timeout > 0:
                 await asyncio.sleep(0.25)
+                timeout -= 0.25
+            
+            if timeout <= 0:
+                _LOGGER.warning("MQTT thread did not exit cleanly within timeout")
+            
+            # Expire the URL to force refresh on next start
             self.mqtt_url_expires = time.time()
-            for grill in self.grills:                       #Mark the grill(s) disconnected so they report unavail.
-                grill_id = grill["thingName"]               #Also hit the callbacks to update HA
-                self.grill_status[grill_id]["status"]["connected"] = False
-                for callback in self.grill_callbacks[grill_id]:
-                    callback()
+            
+            # Mark all grills as disconnected and notify callbacks
+            try:
+                for grill in self.grills:
+                    grill_id = grill["thingName"]
+                    if grill_id in self.grill_status and "status" in self.grill_status[grill_id]:
+                        self.grill_status[grill_id]["status"]["connected"] = False
+                        if grill_id in self.grill_callbacks:
+                            for callback in self.grill_callbacks[grill_id]:
+                                try:
+                                    callback()
+                                except Exception as e:
+                                    _LOGGER.error(f"Error in callback for grill {grill_id}: {e}")
+            except Exception as e:
+                _LOGGER.error(f"Error marking grills as disconnected: {e}")
         else:
-            _LOGGER.info(f"Task Already Dead")
+            _LOGGER.info("MQTT connection already stopped")
 
     async def api_wrapper(
         self, method: str, url: str, data: dict = {}, headers: dict = {}
@@ -397,4 +528,59 @@ class traeger:
                 exception,
             )
         except Exception as exception:  # pylint: disable=broad-except
-            _LOGGER.error("Something really wrong happend! - %s", exception)
+            _LOGGER.error("Something really wrong happened! - %s", exception)
+    
+    def _schedule_reconnect(self):
+        """Schedule a reconnection attempt"""
+        if self.mqtt_thread_running and not self.mqtt_thread_refreshing:
+            _LOGGER.info("Scheduling MQTT reconnection attempt")
+            self.hass.async_create_task(self._attempt_reconnect())
+    
+    async def _attempt_reconnect(self):
+        """Attempt to reconnect to MQTT"""
+        if not self.mqtt_thread_running or self.mqtt_thread_refreshing:
+            return
+            
+        try:
+            _LOGGER.info(f"Attempting MQTT reconnection (attempt {self.consecutive_failures + 1})")
+            self.mqtt_thread_refreshing = True
+            
+            if self.mqtt_client:
+                try:
+                    self.mqtt_client.disconnect()
+                except:
+                    pass
+                self.mqtt_client = None
+            
+            await self.refresh_mqtt_url()
+            await self.get_mqtt_client()
+            
+        except Exception as e:
+            _LOGGER.error(f"Reconnection attempt failed: {e}")
+            self.consecutive_failures += 1
+            
+            if self.consecutive_failures >= self.max_retry_attempts:
+                _LOGGER.error("Max reconnection attempts reached, killing connection")
+                await self.kill()
+        finally:
+            self.mqtt_thread_refreshing = False
+    
+    async def _force_reconnect(self):
+        """Force a reconnection (used for health check failures)"""
+        _LOGGER.info("Forcing MQTT reconnection due to health check")
+        self.consecutive_failures = 0  # Reset counter for forced reconnects
+        await self._attempt_reconnect()
+    
+    def get_connection_status(self):
+        """Get detailed connection status for diagnostics"""
+        return {
+            "state": self.connection_state,
+            "retry_count": self.connection_retry_count,
+            "consecutive_failures": self.consecutive_failures,
+            "last_successful_connection": self.last_successful_connection,
+            "last_connection_attempt": self.last_connection_attempt,
+            "mqtt_thread_running": self.mqtt_thread_running,
+            "mqtt_url_expires": self.mqtt_url_expires,
+            "mqtt_url_remaining": self.mqtt_url_remaining(),
+            "token_remaining": self.token_remaining()
+        }
