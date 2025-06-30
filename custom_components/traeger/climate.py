@@ -103,6 +103,12 @@ class TraegerClimateEntity(TraegerBaseClimate):
     def target_temperature(self):
         if self.grill_state is None:
             return 0
+        
+        # Return 0 for target temperature when grill is off/idle
+        state = self.grill_state["system_status"]
+        if state in [GRILL_MODE_OFFLINE, GRILL_MODE_IDLE, GRILL_MODE_SLEEPING, GRILL_MODE_SHUTDOWN]:
+            return 0
+            
         return self.grill_state["set"]
 
     @property
