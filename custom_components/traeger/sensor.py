@@ -27,12 +27,26 @@ async def async_setup_entry(hass, entry, async_add_devices):
     grills = client.get_grills()
     for grill in grills:
         grill_id = grill["thingName"]
-        async_add_devices([PelletSensor(client, grill["thingName"], "Pellet Level", "pellet_level")])
-        async_add_devices([ValueTemperature(client, grill["thingName"], "Ambient Temperature", "ambient")])
-        async_add_devices([GrillTimer(client, grill["thingName"], "Cook Timer Start", "cook_timer_start")])
-        async_add_devices([GrillTimer(client, grill["thingName"], "Cook Timer End", "cook_timer_end")])
-        async_add_devices([GrillState(client, grill["thingName"], "Grill State", "grill_state")])
-        async_add_devices([HeatingState(client, grill["thingName"], "Heating State", "heating_state")])
+        
+        # Get grill features to conditionally create entities
+        grill_features = client.get_features_for_device(grill_id)
+        
+        entities_to_add = []
+        
+        # Only add Pellet Sensor if connected
+        if grill_features and grill_features.get("pellet_sensor_connected") == 1:
+            entities_to_add.append(PelletSensor(client, grill["thingName"], "Pellet Level", "pellet_level"))
+        
+        # Always add core sensors (no feature detection needed)
+        entities_to_add.extend([
+            ValueTemperature(client, grill["thingName"], "Ambient Temperature", "ambient"),
+            GrillTimer(client, grill["thingName"], "Cook Timer Start", "cook_timer_start"),
+            GrillTimer(client, grill["thingName"], "Cook Timer End", "cook_timer_end"),
+            GrillState(client, grill["thingName"], "Grill State", "grill_state"),
+            HeatingState(client, grill["thingName"], "Heating State", "heating_state")
+        ])
+        
+        async_add_devices(entities_to_add)
         TraegerGrillMonitor(client, grill_id, async_add_devices, ProbeState)
 
 

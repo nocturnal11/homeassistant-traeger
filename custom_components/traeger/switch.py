@@ -15,9 +15,21 @@ async def async_setup_entry(hass, entry, async_add_devices):
     grills = client.get_grills()
     for grill in grills:
         grill_id = grill["thingName"]
-        async_add_devices([TraegerSuperSmokeEntity(client, grill["thingName"], "smoke", "Super Smoke Enabled", "mdi:weather-fog", 20, 21)])
-        async_add_devices([TraegerSwitchEntity(client, grill["thingName"], "keepwarm", "Keep Warm Enabled", "mdi:beach", 18, 19)])
-        async_add_devices([TraegerConnectEntity(client, grill["thingName"], "connect", "Connect")])
+        
+        # Get grill features to conditionally create entities
+        grill_features = client.get_features_for_device(grill_id)
+        
+        entities_to_add = []
+        
+        # Only add Super Smoke entity if supported by the grill
+        if grill_features and grill_features.get("super_smoke_enabled") == 1:
+            entities_to_add.append(TraegerSuperSmokeEntity(client, grill["thingName"], "smoke", "Super Smoke Enabled", "mdi:weather-fog", 20, 21))
+        
+        # Always add Keep Warm and Connect entities (no feature detection needed)
+        entities_to_add.append(TraegerSwitchEntity(client, grill["thingName"], "keepwarm", "Keep Warm Enabled", "mdi:beach", 18, 19))
+        entities_to_add.append(TraegerConnectEntity(client, grill["thingName"], "connect", "Connect"))
+        
+        async_add_devices(entities_to_add)
 
 class TraegerBaseSwitch(SwitchEntity, TraegerBaseEntity):
     def __init__(self, client, grill_id, devname, friendly_name):
