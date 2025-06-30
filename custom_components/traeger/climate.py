@@ -284,13 +284,52 @@ class AccessoryTraegerClimateEntity(TraegerBaseClimate):
     def supported_features(self):
         """Return the list of supported features for the grill"""
         return ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
+    
+    @property
+    def extra_state_attributes(self):
+        """Return the state attributes with probe reliability info."""
+        attributes = super().extra_state_attributes.copy()
+        
+        # Add probe reliability information
+        if hasattr(self.client, 'probe_reliability'):
+            reliability_state = self.client.probe_reliability.get_probe_state(self.sensor_id)
+            connection_quality = self.client.probe_reliability.get_connection_quality(self.sensor_id)
+            
+            attributes.update({
+                "connection_quality": connection_quality,
+                "connection_failures": reliability_state['connection_failures'],
+                "consecutive_failures": reliability_state['consecutive_failures'],
+                "temp_validation_failures": reliability_state['temp_validation_failures']
+            })
+            
+            # Add raw connection state for debugging
+            if self.grill_accessory is not None:
+                attributes["raw_connection_state"] = bool(self.grill_accessory.get("con", 0))
+                
+        return attributes
 
     # Climate Methods
     async def async_set_temperature(self, **kwargs):
-        """Set new target temperature."""
+        """Set new target temperature with backup."""
         self.current_preset_mode = PRESET_NONE
         temperature = kwargs.get(ATTR_TEMPERATURE)
-        await self.client.set_probe_temperature(self.grill_id, round(temperature))
+        rounded_temp = round(temperature)
+        
+        # Backup the target temperature for persistence
+        self.client.probe_reliability.backup_target_temperature(
+            self.sensor_id, rounded_temp
+        )
+        
+        await self.client.set_probe_temperature(self.grill_id, rounded_temp)
+    
+    async def _restore_target_temperature(self, target_temp):
+        """Restore target temperature after reconnection"""
+        try:
+            await self.client.set_probe_temperature(self.grill_id, round(target_temp))
+        except Exception as e:
+            import logging
+            _LOGGER = logging.getLogger(__name__)
+            _LOGGER.warning(f"Failed to restore probe {self.sensor_id} target temperature: {e}")
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Start grill shutdown sequence"""
@@ -299,7 +338,14 @@ class AccessoryTraegerClimateEntity(TraegerBaseClimate):
             #await self.client.shutdown_grill(self.grill_id)
 
     async def async_set_preset_mode(self, preset_mode):
-        """Set new target preset mode"""
+        """Set new target preset mode with backup"""
         self.current_preset_mode = preset_mode
         temperature = PROBE_PRESET_MODES[preset_mode][self.grill_units]
-        await self.client.set_probe_temperature(self.grill_id, round(temperature))
+        rounded_temp = round(temperature)
+        
+        # Backup the preset temperature for persistence
+        self.client.probe_reliability.backup_target_temperature(
+            self.sensor_id, rounded_temp
+        )
+        
+        await self.client.set_probe_temperature(self.grill_id, rounded_temp)

@@ -1,6 +1,10 @@
 """TraegerBaseEntity class"""
+import time
+import logging
 from homeassistant.helpers.entity import Entity
 from .const import DOMAIN, NAME, VERSION, ATTRIBUTION
+
+_LOGGER = logging.getLogger(__name__)
 
 class TraegerBaseEntity(Entity):
     def __init__(self, client, grill_id):
@@ -62,6 +66,130 @@ class TraegerBaseEntity(Entity):
             "integration": DOMAIN,
         }
 
+class TraegerProbeReliabilityManager:
+    """Manages probe connection reliability and state persistence"""
+    
+    def __init__(self):
+        self.probe_states = {}  # uuid -> probe reliability state
+        
+    def get_probe_state(self, probe_uuid):
+        """Get or create probe reliability state"""
+        if probe_uuid not in self.probe_states:
+            self.probe_states[probe_uuid] = {
+                'last_connected_time': 0,
+                'last_disconnected_time': 0,
+                'connection_failures': 0,
+                'consecutive_failures': 0,
+                'target_temp_backup': None,
+                'connection_history': [],  # Recent connection events
+                'availability_grace_until': 0,
+                'last_valid_temp': None,
+                'temp_validation_failures': 0
+            }
+        return self.probe_states[probe_uuid]
+    
+    def update_probe_connection(self, probe_uuid, is_connected, temperature=None):
+        """Update probe connection state and calculate reliability metrics"""
+        state = self.get_probe_state(probe_uuid)
+        current_time = time.time()
+        
+        # Update connection history (keep last 10 events)
+        state['connection_history'].append({
+            'time': current_time,
+            'connected': is_connected,
+            'temperature': temperature
+        })
+        if len(state['connection_history']) > 10:
+            state['connection_history'].pop(0)
+        
+        if is_connected:
+            if state['last_connected_time'] == 0 or current_time - state['last_disconnected_time'] > 5:
+                # New connection or significant gap
+                state['consecutive_failures'] = 0
+                _LOGGER.debug(f"Probe {probe_uuid} connected")
+            state['last_connected_time'] = current_time
+            
+            # Validate temperature reading
+            if temperature is not None:
+                if self._is_valid_temperature(temperature, state['last_valid_temp']):
+                    state['last_valid_temp'] = temperature
+                    state['temp_validation_failures'] = 0
+                else:
+                    state['temp_validation_failures'] += 1
+                    _LOGGER.warning(f"Probe {probe_uuid} invalid temperature: {temperature}")
+        else:
+            state['last_disconnected_time'] = current_time
+            state['consecutive_failures'] += 1
+            state['connection_failures'] += 1
+            
+            # Set grace period for temporary disconnections
+            if state['consecutive_failures'] <= 3:
+                grace_period = min(30 * state['consecutive_failures'], 120)  # 30s to 2min
+                state['availability_grace_until'] = current_time + grace_period
+                _LOGGER.debug(f"Probe {probe_uuid} disconnected, grace period: {grace_period}s")
+            else:
+                _LOGGER.warning(f"Probe {probe_uuid} multiple failures: {state['consecutive_failures']}")
+    
+    def should_show_available(self, probe_uuid, raw_connected):
+        """Determine if probe should show as available considering grace periods"""
+        if raw_connected:
+            return True
+            
+        state = self.get_probe_state(probe_uuid)
+        current_time = time.time()
+        
+        # Check if we're in grace period
+        if current_time < state['availability_grace_until']:
+            return True
+            
+        return False
+    
+    def backup_target_temperature(self, probe_uuid, target_temp):
+        """Backup probe target temperature for persistence"""
+        if target_temp and target_temp > 0:
+            state = self.get_probe_state(probe_uuid)
+            state['target_temp_backup'] = target_temp
+    
+    def get_backup_target_temperature(self, probe_uuid):
+        """Get backed up target temperature"""
+        state = self.get_probe_state(probe_uuid)
+        return state.get('target_temp_backup')
+    
+    def _is_valid_temperature(self, temp, last_valid_temp):
+        """Validate temperature reading for reasonableness"""
+        if temp is None:
+            return False
+            
+        # Basic range check (reasonable cooking temperatures)
+        if temp < -10 or temp > 600:  # Fahrenheit range
+            return False
+            
+        # Check for sudden large changes (could indicate sensor issues)
+        if last_valid_temp is not None:
+            temp_change = abs(temp - last_valid_temp)
+            if temp_change > 100:  # 100°F sudden change is suspicious
+                return False
+                
+        return True
+    
+    def get_connection_quality(self, probe_uuid):
+        """Calculate connection quality score (0-100)"""
+        state = self.get_probe_state(probe_uuid)
+        
+        if len(state['connection_history']) < 2:
+            return 50  # Unknown quality
+            
+        # Calculate recent connection stability
+        recent_events = state['connection_history'][-5:]  # Last 5 events
+        connected_count = sum(1 for event in recent_events if event['connected'])
+        connection_ratio = connected_count / len(recent_events)
+        
+        # Factor in consecutive failures
+        failure_penalty = min(state['consecutive_failures'] * 20, 80)
+        
+        quality = int((connection_ratio * 100) - failure_penalty)
+        return max(0, min(100, quality))
+
 class TraegerGrillMonitor:
     def __init__(self, client, grill_id, async_add_devices, probe_entity = None):
         self.client = client
@@ -70,6 +198,9 @@ class TraegerGrillMonitor:
         self.probe_entity = probe_entity
         self.accessory_status = {}
         self.device_state = self.client.get_state_for_device(self.grill_id)
+        # Initialize probe reliability manager
+        if not hasattr(client, 'probe_reliability'):
+            client.probe_reliability = TraegerProbeReliabilityManager()
         self.grill_add_accessories()
         self.client.set_callback_for_grill(self.grill_id, self.grill_monitor_internal)
 
