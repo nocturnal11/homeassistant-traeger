@@ -50,7 +50,7 @@ class TraegerBaseClimate(ClimateEntity, TraegerBaseEntity):
     @property
     def name(self):
         """Return the name of the climate entity"""
-        return self.friendly_name
+        return self._generate_entity_name(self.friendly_name)
 
     # Climate Properties
     @property

@@ -61,7 +61,7 @@ class TraegerBaseSwitch(SwitchEntity, TraegerBaseEntity):
     @property
     def name(self):
         """Return the name of the switch"""
-        return self.friendly_name
+        return self._generate_entity_name(self.friendly_name)
 
     @property
     def unique_id(self):

@@ -33,7 +33,7 @@ class TraegerNumberEntity(NumberEntity, TraegerBaseEntity):
     def name(self):
         """Return the name of the number entity"""
         friendly_devname = self.devname.replace("_", " ").title()
-        return friendly_devname
+        return self._generate_entity_name(friendly_devname)
 
     @property
     def unique_id(self):

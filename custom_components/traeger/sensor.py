@@ -81,7 +81,7 @@ class TraegerBaseSensor(TraegerBaseEntity):
     @property
     def name(self):
         """Return the name of the sensor"""
-        return self.friendly_name
+        return self._generate_entity_name(self.friendly_name)
 
     @property
     def unique_id(self):
