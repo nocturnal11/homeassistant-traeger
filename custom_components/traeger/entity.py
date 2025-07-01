@@ -80,10 +80,12 @@ class TraegerBaseEntity(Entity):
             return f"grill_{grill_suffix}"
 
     def _generate_entity_name(self, base_name):
-        """Generate entity name with grill identifier for unique entity IDs"""
+        """Generate entity name with grill identifier prefix for unique entity IDs"""
         # Get the last 4 characters of grill ID for brevity
-        grill_suffix = self.grill_id[-4:] if len(self.grill_id) > 4 else self.grill_id
-        return f"{base_name} {grill_suffix}"
+        grill_prefix = self.grill_id[-4:] if len(self.grill_id) > 4 else self.grill_id
+        # Convert base_name to lowercase and replace spaces with underscores for entity ID format
+        clean_base = base_name.lower().replace(" ", "_")
+        return f"{grill_prefix}_{clean_base}"
 
     @property
     def should_poll(self):

@@ -61,7 +61,12 @@ class TraegerBaseSwitch(SwitchEntity, TraegerBaseEntity):
     @property
     def name(self):
         """Return the name of the switch"""
-        return self._generate_entity_name(self.friendly_name)
+        # Map friendly names to shorter entity ID names
+        name_mapping = {"Super Smoke": "smoke", "Keep Warm": "keep_warm"}
+        simple_name = name_mapping.get(
+            self.friendly_name, self.friendly_name.lower().replace(" ", "_")
+        )
+        return self._generate_entity_name(simple_name)
 
     @property
     def unique_id(self):

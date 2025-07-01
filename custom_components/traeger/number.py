@@ -32,8 +32,9 @@ class TraegerNumberEntity(NumberEntity, TraegerBaseEntity):
     @property
     def name(self):
         """Return the name of the number entity"""
-        friendly_devname = self.devname.replace("_", " ").title()
-        return self._generate_entity_name(friendly_devname)
+        # Use simple name for entity ID: cook_timer -> timer
+        simple_name = "timer" if self.devname == "cook_timer" else self.devname
+        return self._generate_entity_name(simple_name)
 
     @property
     def unique_id(self):

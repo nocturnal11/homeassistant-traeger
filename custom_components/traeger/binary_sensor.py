@@ -82,7 +82,7 @@ class PelletOutageSensor(BinarySensorEntity, TraegerBaseEntity):
     @property
     def name(self):
         """Return the name of the binary sensor."""
-        return self._generate_entity_name("Pellet Outage")
+        return self._generate_entity_name("pellet_outage")
 
     @property
     def unique_id(self):

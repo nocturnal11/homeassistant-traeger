@@ -50,7 +50,19 @@ class TraegerBaseClimate(ClimateEntity, TraegerBaseEntity):
     @property
     def name(self):
         """Return the name of the climate entity"""
-        return self._generate_entity_name(self.friendly_name)
+        if self.friendly_name == "Grill":
+            simple_name = "grill"
+        elif "Probe" in self.friendly_name:
+            # Extract probe ID from name like "Probe 1a2b"
+            parts = self.friendly_name.split()
+            if len(parts) >= 2:
+                probe_id = parts[1]
+                simple_name = f"probe_{probe_id}"
+            else:
+                simple_name = "probe"
+        else:
+            simple_name = self.friendly_name.lower().replace(" ", "_")
+        return self._generate_entity_name(simple_name)
 
     # Climate Properties
     @property

@@ -81,7 +81,31 @@ class TraegerBaseSensor(TraegerBaseEntity):
     @property
     def name(self):
         """Return the name of the sensor"""
-        return self._generate_entity_name(self.friendly_name)
+        # Map friendly names to shorter entity ID names
+        name_mapping = {
+            "Ambient Temperature": "ambient",
+            "Timer Start": "timer_start",
+            "Timer End": "timer_end",
+            "State": "state",
+            "Heating State": "heating",
+            "Pellet Level": "pellets",
+        }
+
+        # Handle probe entities specially
+        if "Probe" in self.friendly_name and "State" in self.friendly_name:
+            # Extract probe ID from name like "Probe 1a2b State"
+            parts = self.friendly_name.split()
+            if len(parts) >= 2:
+                probe_id = parts[1]
+                simple_name = f"probe_{probe_id}_state"
+            else:
+                simple_name = "probe_state"
+        else:
+            simple_name = name_mapping.get(
+                self.friendly_name, self.friendly_name.lower().replace(" ", "_")
+            )
+
+        return self._generate_entity_name(simple_name)
 
     @property
     def unique_id(self):
