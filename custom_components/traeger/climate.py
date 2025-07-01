@@ -1,4 +1,5 @@
 """Climate platform for Traeger grills"""
+
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
@@ -35,7 +36,9 @@ async def async_setup_entry(hass, entry, async_add_devices):
     for grill in grills:
         grill_id = grill["thingName"]
         async_add_devices([TraegerClimateEntity(client, grill_id, "Grill")])
-        TraegerGrillMonitor(client, grill_id, async_add_devices, AccessoryTraegerClimateEntity)
+        TraegerGrillMonitor(
+            client, grill_id, async_add_devices, AccessoryTraegerClimateEntity
+        )
 
 
 class TraegerBaseClimate(ClimateEntity, TraegerBaseEntity):
@@ -102,12 +105,17 @@ class TraegerClimateEntity(TraegerBaseClimate):
     def target_temperature(self):
         if self.grill_state is None:
             return 0
-        
+
         # Return 0 for target temperature when grill is off/idle
         state = self.grill_state["system_status"]
-        if state in [GRILL_MODE_OFFLINE, GRILL_MODE_IDLE, GRILL_MODE_SLEEPING, GRILL_MODE_SHUTDOWN]:
+        if state in [
+            GRILL_MODE_OFFLINE,
+            GRILL_MODE_IDLE,
+            GRILL_MODE_SLEEPING,
+            GRILL_MODE_SHUTDOWN,
+        ]:
             return 0
-            
+
         return self.grill_state["set"]
 
     @property
@@ -178,7 +186,9 @@ class AccessoryTraegerClimateEntity(TraegerBaseClimate):
 
     def __init__(self, client, grill_id, sensor_id):
         # Generate friendlier probe name
-        probe_name = f"Probe {sensor_id[-4:]}" if len(sensor_id) > 8 else f"Probe {sensor_id}"
+        probe_name = (
+            f"Probe {sensor_id[-4:]}" if len(sensor_id) > 8 else f"Probe {sensor_id}"
+        )
         super().__init__(client, grill_id, probe_name)
         self.sensor_id = sensor_id
         self.grill_accessory = self.client.get_details_for_accessory(
@@ -206,9 +216,11 @@ class AccessoryTraegerClimateEntity(TraegerBaseClimate):
     @property
     def available(self):
         """Reports unavailable when the grill is powered off"""
-        if (self.grill_state is None
-                or self.grill_state["connected"] == False
-                or self.grill_accessory is None):
+        if (
+            self.grill_state is None
+            or self.grill_state["connected"] == False
+            or self.grill_accessory is None
+        ):
             return False
         else:
             return self.grill_accessory["con"]
@@ -217,7 +229,9 @@ class AccessoryTraegerClimateEntity(TraegerBaseClimate):
     def unique_id(self):
         base_id = self._generate_entity_id_base()
         # Use last 4 chars of sensor_id for readability
-        probe_suffix = self.sensor_id[-4:] if len(self.sensor_id) > 8 else self.sensor_id
+        probe_suffix = (
+            self.sensor_id[-4:] if len(self.sensor_id) > 8 else self.sensor_id
+        )
         return f"{base_id}_probe_{probe_suffix}"
 
     @property
@@ -277,9 +291,11 @@ class AccessoryTraegerClimateEntity(TraegerBaseClimate):
 
     @property
     def preset_mode(self):
-        if (self.grill_state is None
-                or self.grill_state["probe_con"] == 0
-                or self.target_temperature == 0):
+        if (
+            self.grill_state is None
+            or self.grill_state["probe_con"] == 0
+            or self.target_temperature == 0
+        ):
             # Reset current preset mode
             self.current_preset_mode = PRESET_NONE
 
@@ -292,29 +308,41 @@ class AccessoryTraegerClimateEntity(TraegerBaseClimate):
     @property
     def supported_features(self):
         """Return the list of supported features for the grill"""
-        return ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
-    
+        return (
+            ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
+        )
+
     @property
     def extra_state_attributes(self):
         """Return the state attributes with probe reliability info."""
         attributes = super().extra_state_attributes.copy()
-        
+
         # Add probe reliability information
-        if hasattr(self.client, 'probe_reliability'):
-            reliability_state = self.client.probe_reliability.get_probe_state(self.sensor_id)
-            connection_quality = self.client.probe_reliability.get_connection_quality(self.sensor_id)
-            
-            attributes.update({
-                "connection_quality": connection_quality,
-                "connection_failures": reliability_state['connection_failures'],
-                "consecutive_failures": reliability_state['consecutive_failures'],
-                "temp_validation_failures": reliability_state['temp_validation_failures']
-            })
-            
+        if hasattr(self.client, "probe_reliability"):
+            reliability_state = self.client.probe_reliability.get_probe_state(
+                self.sensor_id
+            )
+            connection_quality = self.client.probe_reliability.get_connection_quality(
+                self.sensor_id
+            )
+
+            attributes.update(
+                {
+                    "connection_quality": connection_quality,
+                    "connection_failures": reliability_state["connection_failures"],
+                    "consecutive_failures": reliability_state["consecutive_failures"],
+                    "temp_validation_failures": reliability_state[
+                        "temp_validation_failures"
+                    ],
+                }
+            )
+
             # Add raw connection state for debugging
             if self.grill_accessory is not None:
-                attributes["raw_connection_state"] = bool(self.grill_accessory.get("con", 0))
-                
+                attributes["raw_connection_state"] = bool(
+                    self.grill_accessory.get("con", 0)
+                )
+
         return attributes
 
     # Climate Methods
@@ -323,38 +351,41 @@ class AccessoryTraegerClimateEntity(TraegerBaseClimate):
         self.current_preset_mode = PRESET_NONE
         temperature = kwargs.get(ATTR_TEMPERATURE)
         rounded_temp = round(temperature)
-        
+
         # Backup the target temperature for persistence
         self.client.probe_reliability.backup_target_temperature(
             self.sensor_id, rounded_temp
         )
-        
+
         await self.client.set_probe_temperature(self.grill_id, rounded_temp)
-    
+
     async def _restore_target_temperature(self, target_temp):
         """Restore target temperature after reconnection"""
         try:
             await self.client.set_probe_temperature(self.grill_id, round(target_temp))
         except Exception as e:
             import logging
+
             _LOGGER = logging.getLogger(__name__)
-            _LOGGER.warning(f"Failed to restore probe {self.sensor_id} target temperature: {e}")
+            _LOGGER.warning(
+                f"Failed to restore probe {self.sensor_id} target temperature: {e}"
+            )
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Start grill shutdown sequence"""
         if hvac_mode == HVACMode.OFF or hvac_mode == HVACMode.COOL:
             hvac_mode = hvac_mode
-            #await self.client.shutdown_grill(self.grill_id)
+            # await self.client.shutdown_grill(self.grill_id)
 
     async def async_set_preset_mode(self, preset_mode):
         """Set new target preset mode with backup"""
         self.current_preset_mode = preset_mode
         temperature = PROBE_PRESET_MODES[preset_mode][self.grill_units]
         rounded_temp = round(temperature)
-        
+
         # Backup the preset temperature for persistence
         self.client.probe_reliability.backup_target_temperature(
             self.sensor_id, rounded_temp
         )
-        
+
         await self.client.set_probe_temperature(self.grill_id, rounded_temp)

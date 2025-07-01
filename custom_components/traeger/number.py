@@ -1,4 +1,5 @@
 """Number/Timer platform for Traeger."""
+
 from homeassistant.components.number import NumberEntity
 
 from .const import (
@@ -7,13 +8,17 @@ from .const import (
 
 from .entity import TraegerBaseEntity
 
+
 async def async_setup_entry(hass, entry, async_add_devices):
     """Setup Number/Timer platform."""
     client = hass.data[DOMAIN][entry.entry_id]
     grills = client.get_grills()
     for grill in grills:
         grill_id = grill["thingName"]
-        async_add_devices([TraegerNumberEntity(client, grill["thingName"], "cook_timer")])
+        async_add_devices(
+            [TraegerNumberEntity(client, grill["thingName"], "cook_timer")]
+        )
+
 
 class TraegerNumberEntity(NumberEntity, TraegerBaseEntity):
     """Traeger Number/Timer Value class."""
@@ -27,7 +32,7 @@ class TraegerNumberEntity(NumberEntity, TraegerBaseEntity):
     @property
     def name(self):
         """Return the name of the number entity"""
-        friendly_devname = self.devname.replace('_', ' ').title()
+        friendly_devname = self.devname.replace("_", " ").title()
         return friendly_devname
 
     @property
@@ -62,6 +67,6 @@ class TraegerNumberEntity(NumberEntity, TraegerBaseEntity):
         return "min"
 
     # Timer Methods
-    async def async_set_native_value(self, value : float):
+    async def async_set_native_value(self, value: float):
         """Set new Timer Val."""
-        await self.client.set_timer_sec(self.grill_id, (round(value)*60))
+        await self.client.set_timer_sec(self.grill_id, (round(value) * 60))

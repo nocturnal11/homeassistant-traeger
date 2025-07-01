@@ -1,4 +1,5 @@
 """Sensor platform for Traeger."""
+
 from homeassistant.helpers.entity import Entity
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 
@@ -27,25 +28,35 @@ async def async_setup_entry(hass, entry, async_add_devices):
     grills = client.get_grills()
     for grill in grills:
         grill_id = grill["thingName"]
-        
+
         # Get grill features to conditionally create entities
         grill_features = client.get_features_for_device(grill_id)
-        
+
         entities_to_add = []
-        
+
         # Only add Pellet Sensor if connected
         if grill_features and grill_features.get("pellet_sensor_connected") == 1:
-            entities_to_add.append(PelletSensor(client, grill["thingName"], "Pellet Level", "pellet_level"))
-        
+            entities_to_add.append(
+                PelletSensor(client, grill["thingName"], "Pellet Level", "pellet_level")
+            )
+
         # Always add core sensors (no feature detection needed)
-        entities_to_add.extend([
-            ValueTemperature(client, grill["thingName"], "Ambient Temperature", "ambient"),
-            GrillTimer(client, grill["thingName"], "Timer Start", "cook_timer_start"),
-            GrillTimer(client, grill["thingName"], "Timer End", "cook_timer_end"),
-            GrillState(client, grill["thingName"], "State", "grill_state"),
-            HeatingState(client, grill["thingName"], "Heating State", "heating_state")
-        ])
-        
+        entities_to_add.extend(
+            [
+                ValueTemperature(
+                    client, grill["thingName"], "Ambient Temperature", "ambient"
+                ),
+                GrillTimer(
+                    client, grill["thingName"], "Timer Start", "cook_timer_start"
+                ),
+                GrillTimer(client, grill["thingName"], "Timer End", "cook_timer_end"),
+                GrillState(client, grill["thingName"], "State", "grill_state"),
+                HeatingState(
+                    client, grill["thingName"], "Heating State", "heating_state"
+                ),
+            ]
+        )
+
         async_add_devices(entities_to_add)
         TraegerGrillMonitor(client, grill_id, async_add_devices, ProbeState)
 
@@ -107,7 +118,9 @@ class PelletSensor(TraegerBaseSensor):
         if self.grill_features is None:
             return False
         else:
-            return True if self.grill_features["pellet_sensor_connected"] == 1 else False
+            return (
+                True if self.grill_features["pellet_sensor_connected"] == 1 else False
+            )
 
     @property
     def icon(self):
@@ -168,7 +181,7 @@ class GrillState(TraegerBaseSensor):
         elif state == GRILL_MODE_SHUTDOWN:
             return "shutdown"
         else:
-            return "unknown"    # Likely a new state we don't know about
+            return "unknown"  # Likely a new state we don't know about
 
 
 class HeatingState(TraegerBaseSensor):
@@ -200,7 +213,9 @@ class HeatingState(TraegerBaseSensor):
         current_temp = self.grill_state["grill"]
         target_changed = True if target_temp != self.previous_target_temp else False
         min_cook_temp = (
-            GRILL_MIN_TEMP_C if self.grill_units == UnitOfTemperature.CELSIUS else GRILL_MIN_TEMP_F
+            GRILL_MIN_TEMP_C
+            if self.grill_units == UnitOfTemperature.CELSIUS
+            else GRILL_MIN_TEMP_F
         )
         temp_swing = 11 if self.grill_units == UnitOfTemperature.CELSIUS else 20
         low_temp = target_temp - temp_swing
@@ -264,8 +279,16 @@ class ProbeState(TraegerBaseSensor):
 
     def __init__(self, client, grill_id, sensor_id):
         # Generate friendlier probe name
-        probe_name = f"Probe {sensor_id[-4:]} State" if len(sensor_id) > 8 else f"Probe {sensor_id} State"
-        probe_value = f"probe_state_{sensor_id[-4:]}" if len(sensor_id) > 8 else f"probe_state_{sensor_id}"
+        probe_name = (
+            f"Probe {sensor_id[-4:]} State"
+            if len(sensor_id) > 8
+            else f"Probe {sensor_id} State"
+        )
+        probe_value = (
+            f"probe_state_{sensor_id[-4:]}"
+            if len(sensor_id) > 8
+            else f"probe_state_{sensor_id}"
+        )
         super().__init__(client, grill_id, probe_name, probe_value)
         self.sensor_id = sensor_id
         self.grill_accessory = self.client.get_details_for_accessory(
@@ -273,11 +296,17 @@ class ProbeState(TraegerBaseSensor):
         )
         self.previous_target_temp = None
         self.probe_alarm = False
-        self.active_modes = [GRILL_MODE_PREHEATING, GRILL_MODE_IGNITING, GRILL_MODE_CUSTOM_COOK, GRILL_MODE_MANUAL_COOK]
-        
+        self.active_modes = [
+            GRILL_MODE_PREHEATING,
+            GRILL_MODE_IGNITING,
+            GRILL_MODE_CUSTOM_COOK,
+            GRILL_MODE_MANUAL_COOK,
+        ]
+
         # Initialize probe reliability tracking
-        if not hasattr(client, 'probe_reliability'):
+        if not hasattr(client, "probe_reliability"):
             from .entity import TraegerProbeReliabilityManager
+
             client.probe_reliability = TraegerProbeReliabilityManager()
 
         # Tell the Traeger client to call grill_accessory_update() when it gets an update
@@ -290,12 +319,12 @@ class ProbeState(TraegerBaseSensor):
         self.grill_accessory = self.client.get_details_for_accessory(
             self.grill_id, self.sensor_id
         )
-        
+
         # Update probe reliability tracking
         if self.grill_accessory is not None:
             is_connected = bool(self.grill_accessory.get("con", 0))
             temperature = self.grill_accessory.get("probe", {}).get("get_temp")
-            
+
             self.client.probe_reliability.update_probe_connection(
                 self.sensor_id, is_connected, temperature
             )
@@ -311,20 +340,22 @@ class ProbeState(TraegerBaseSensor):
     def available(self):
         """Reports unavailable when the probe is not connected with enhanced reliability"""
 
-        if (self.grill_state is None
-                or self.grill_state["connected"] == False
-                or self.grill_accessory is None):
+        if (
+            self.grill_state is None
+            or self.grill_state["connected"] == False
+            or self.grill_accessory is None
+        ):
             # Reset probe alarm if accessory becomes unavailable
             self.probe_alarm = False
             return False
-        
+
         # Use enhanced availability logic with grace periods
         raw_connected = bool(self.grill_accessory.get("con", 0))
-        
+
         # Reset probe alarm if accessory is not connected
         if not raw_connected:
             self.probe_alarm = False
-            
+
         return self.client.probe_reliability.should_show_available(
             self.sensor_id, raw_connected
         )
@@ -333,7 +364,9 @@ class ProbeState(TraegerBaseSensor):
     def unique_id(self):
         base_id = self._generate_entity_id_base()
         # Use last 4 chars of sensor_id for readability
-        probe_suffix = self.sensor_id[-4:] if len(self.sensor_id) > 8 else self.sensor_id
+        probe_suffix = (
+            self.sensor_id[-4:] if len(self.sensor_id) > 8 else self.sensor_id
+        )
         return f"{base_id}_probe_state_{probe_suffix}"
 
     @property
@@ -352,24 +385,29 @@ class ProbeState(TraegerBaseSensor):
         target_changed = target_temp != self.previous_target_temp
         grill_mode = self.grill_state["system_status"]
         fell_out_temp = 102 if self.grill_units == UnitOfTemperature.CELSIUS else 215
-        
+
         # Enhanced disconnection detection using reliability manager
-        reliability_state = self.client.probe_reliability.get_probe_state(self.sensor_id)
-        
+        reliability_state = self.client.probe_reliability.get_probe_state(
+            self.sensor_id
+        )
+
         # Check for multiple disconnection indicators
         is_physically_connected = bool(self.grill_accessory.get("con", 0))
         temp_indicates_disconnection = probe_temp >= fell_out_temp
-        has_temp_validation_failures = reliability_state['temp_validation_failures'] > 2
-        
+        has_temp_validation_failures = reliability_state["temp_validation_failures"] > 2
+
         # Latch probe alarm, reset if target changed or grill leaves active modes
         if probe_data.get("alarm_fired", False):
             self.probe_alarm = True
-        elif ((target_changed and target_temp != 0)
-                or (grill_mode not in self.active_modes)):
+        elif (target_changed and target_temp != 0) or (
+            grill_mode not in self.active_modes
+        ):
             self.probe_alarm = False
 
         # Enhanced fell_out detection
-        if temp_indicates_disconnection or (not is_physically_connected and has_temp_validation_failures):
+        if temp_indicates_disconnection or (
+            not is_physically_connected and has_temp_validation_failures
+        ):
             state = "fell_out"
         elif self.probe_alarm:
             state = "at_temp"
@@ -385,30 +423,40 @@ class ProbeState(TraegerBaseSensor):
 
         self.previous_target_temp = target_temp
         return state
-    
+
     @property
     def extra_state_attributes(self):
         """Return the state attributes with probe reliability info."""
         attributes = super().extra_state_attributes.copy()
-        
+
         # Add probe reliability information
-        if hasattr(self.client, 'probe_reliability'):
-            reliability_state = self.client.probe_reliability.get_probe_state(self.sensor_id)
-            connection_quality = self.client.probe_reliability.get_connection_quality(self.sensor_id)
-            
-            attributes.update({
-                "connection_quality": connection_quality,
-                "connection_failures": reliability_state['connection_failures'],
-                "consecutive_failures": reliability_state['consecutive_failures'],
-                "temp_validation_failures": reliability_state['temp_validation_failures'],
-                "probe_alarm_state": self.probe_alarm
-            })
-            
+        if hasattr(self.client, "probe_reliability"):
+            reliability_state = self.client.probe_reliability.get_probe_state(
+                self.sensor_id
+            )
+            connection_quality = self.client.probe_reliability.get_connection_quality(
+                self.sensor_id
+            )
+
+            attributes.update(
+                {
+                    "connection_quality": connection_quality,
+                    "connection_failures": reliability_state["connection_failures"],
+                    "consecutive_failures": reliability_state["consecutive_failures"],
+                    "temp_validation_failures": reliability_state[
+                        "temp_validation_failures"
+                    ],
+                    "probe_alarm_state": self.probe_alarm,
+                }
+            )
+
             # Add raw connection state for debugging
             if self.grill_accessory is not None:
-                attributes["raw_connection_state"] = bool(self.grill_accessory.get("con", 0))
+                attributes["raw_connection_state"] = bool(
+                    self.grill_accessory.get("con", 0)
+                )
                 probe_data = self.grill_accessory.get("probe", {})
-                attributes["last_valid_temp"] = reliability_state.get('last_valid_temp')
+                attributes["last_valid_temp"] = reliability_state.get("last_valid_temp")
                 attributes["probe_temperature"] = probe_data.get("get_temp")
-                
+
         return attributes

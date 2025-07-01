@@ -1,4 +1,5 @@
 """Adds config flow for Blueprint."""
+
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
@@ -10,11 +11,16 @@ from .traeger import traeger
 from .const import (
     CONF_PASSWORD,
     CONF_USERNAME,
+    CONF_PELLET_OUTAGE_TEMP_DROP,
+    CONF_PELLET_OUTAGE_TIME_THRESHOLD,
     DOMAIN,
     PLATFORMS,
+    PELLET_OUTAGE_TEMP_DROP_F,
+    PELLET_OUTAGE_TIME_THRESHOLD,
 )
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
+
 
 class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Blueprint."""
@@ -81,8 +87,8 @@ class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             return True
         except Exception as exception:  # pylint: disable=broad-except
             _LOGGER.error(
-                 "Failed to login %s",
-                 exception,
+                "Failed to login %s",
+                exception,
             )
             pass
         return False
@@ -106,14 +112,33 @@ class BlueprintOptionsFlowHandler(config_entries.OptionsFlow):
             self.options.update(user_input)
             return await self._update_options()
 
+        # Create schema with platforms and pellet outage options
+        schema_dict = {
+            vol.Required(x, default=self.options.get(x, True)): bool
+            for x in sorted(PLATFORMS)
+        }
+
+        # Add pellet outage configuration options
+        schema_dict.update(
+            {
+                vol.Optional(
+                    CONF_PELLET_OUTAGE_TEMP_DROP,
+                    default=self.options.get(
+                        CONF_PELLET_OUTAGE_TEMP_DROP, PELLET_OUTAGE_TEMP_DROP_F
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=20, max=100)),
+                vol.Optional(
+                    CONF_PELLET_OUTAGE_TIME_THRESHOLD,
+                    default=self.options.get(
+                        CONF_PELLET_OUTAGE_TIME_THRESHOLD, PELLET_OUTAGE_TIME_THRESHOLD
+                    ),
+                ): vol.All(vol.Coerce(int), vol.Range(min=60, max=1800)),
+            }
+        )
+
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(x, default=self.options.get(x, True)): bool
-                    for x in sorted(PLATFORMS)
-                }
-            ),
+            data_schema=vol.Schema(schema_dict),
         )
 
     async def _update_options(self):

@@ -4,6 +4,7 @@ Custom integration to integrate traeger with Home Assistant.
 For more details about this integration, please refer to
 https://github.com/sebirdman/hass_traeger
 """
+
 import asyncio
 from datetime import timedelta
 import logging
@@ -40,6 +41,7 @@ async def async_setup(hass: HomeAssistant, config: Config):
     """Set up this integration using YAML is not supported."""
     return True
 
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up this integration using UI."""
     if hass.data.get(DOMAIN) is None:
@@ -51,7 +53,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     session = async_get_clientsession(hass)
 
-
     client = traeger(username, password, hass, session)
 
     await client.start(30)
@@ -59,7 +60,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     for platform in PLATFORMS:
         if entry.options.get(platform, True):
-                await hass.config_entries.async_forward_entry_setups(entry, [platform])
+            await hass.config_entries.async_forward_entry_setups(entry, [platform])
+
     async def async_shutdown(event: Event):
         """Shut down the client."""
         await client.kill()
@@ -67,6 +69,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, async_shutdown)
     entry.add_update_listener(async_reload_entry)
     return True
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of an entry."""
