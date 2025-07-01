@@ -34,7 +34,7 @@ async def async_setup_entry(hass, entry, async_add_devices):
     grills = client.get_grills()
     for grill in grills:
         grill_id = grill["thingName"]
-        async_add_devices([TraegerClimateEntity(client, grill_id, "Climate")])
+        async_add_devices([TraegerClimateEntity(client, grill_id, "Grill")])
         TraegerGrillMonitor(client, grill_id, async_add_devices, AccessoryTraegerClimateEntity)
 
 
@@ -47,8 +47,7 @@ class TraegerBaseClimate(ClimateEntity, TraegerBaseEntity):
     @property
     def name(self):
         """Return the name of the climate entity"""
-        grill_name = self._get_grill_friendly_name()
-        return f"{grill_name} {self.friendly_name}"
+        return self.friendly_name
 
     # Climate Properties
     @property

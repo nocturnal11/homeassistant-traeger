@@ -40,9 +40,9 @@ async def async_setup_entry(hass, entry, async_add_devices):
         # Always add core sensors (no feature detection needed)
         entities_to_add.extend([
             ValueTemperature(client, grill["thingName"], "Ambient Temperature", "ambient"),
-            GrillTimer(client, grill["thingName"], "Cook Timer Start", "cook_timer_start"),
-            GrillTimer(client, grill["thingName"], "Cook Timer End", "cook_timer_end"),
-            GrillState(client, grill["thingName"], "Grill State", "grill_state"),
+            GrillTimer(client, grill["thingName"], "Timer Start", "cook_timer_start"),
+            GrillTimer(client, grill["thingName"], "Timer End", "cook_timer_end"),
+            GrillState(client, grill["thingName"], "State", "grill_state"),
             HeatingState(client, grill["thingName"], "Heating State", "heating_state")
         ])
         
@@ -70,8 +70,7 @@ class TraegerBaseSensor(TraegerBaseEntity):
     @property
     def name(self):
         """Return the name of the sensor"""
-        grill_name = self._get_grill_friendly_name()
-        return f"{grill_name} {self.friendly_name}"
+        return self.friendly_name
 
     @property
     def unique_id(self):

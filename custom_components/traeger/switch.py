@@ -23,11 +23,11 @@ async def async_setup_entry(hass, entry, async_add_devices):
         
         # Only add Super Smoke entity if supported by the grill
         if grill_features and grill_features.get("super_smoke_enabled") == 1:
-            entities_to_add.append(TraegerSuperSmokeEntity(client, grill["thingName"], "smoke", "Super Smoke Enabled", "mdi:weather-fog", 20, 21))
+            entities_to_add.append(TraegerSuperSmokeEntity(client, grill["thingName"], "smoke", "Super Smoke", "mdi:weather-fog", 20, 21))
         
         # Always add Keep Warm and Connect entities (no feature detection needed)
-        entities_to_add.append(TraegerSwitchEntity(client, grill["thingName"], "keepwarm", "Keep Warm Enabled", "mdi:beach", 18, 19))
-        entities_to_add.append(TraegerConnectEntity(client, grill["thingName"], "connect", "Connect"))
+        entities_to_add.append(TraegerSwitchEntity(client, grill["thingName"], "keepwarm", "Keep Warm", "mdi:beach", 18, 19))
+        entities_to_add.append(TraegerConnectEntity(client, grill["thingName"], "connect", "WiFi Connect"))
         
         async_add_devices(entities_to_add)
 
@@ -42,8 +42,7 @@ class TraegerBaseSwitch(SwitchEntity, TraegerBaseEntity):
     @property
     def name(self):
         """Return the name of the switch"""
-        grill_name = self._get_grill_friendly_name()
-        return f"{grill_name} {self.friendly_name}"
+        return self.friendly_name
 
     @property
     def unique_id(self):

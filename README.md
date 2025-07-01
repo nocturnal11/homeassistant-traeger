@@ -1,39 +1,85 @@
-# Traeger HASS component
+# Traeger Home Assistant Integration
 
 [![GitHub Release][releases-shield]][releases]
 [![License][license-shield]](LICENSE)
 [![hacs][hacsbadge]][hacs]
 
-_Component to integrate with [Traeger WiFire Grills][traeger]._
+A comprehensive Home Assistant integration for [Traeger WiFire Grills][traeger] with real-time monitoring and control capabilities.
 
-**This component will set up the following platforms.**
+## ✨ Recent Updates (v1.0.0)
 
-Platform | Description
--- | --
-`sensor` | Shows various temperature readings from the grill or accessories
-`climate` | Allows temperature control of the grill and probe
-`number` | Allows minutes input to the timer
-`switch` | Allow SuperSmoke, Keepwarm, and connectivity switch
+- **Smart Temperature Display**: Target temperature now shows as 0 when grill is off for clearer status indication
+- **Feature-Based Entity Creation**: Entities are dynamically created based on your grill's actual capabilities
+- **Improved Entity Naming**: More user-friendly entity names and better organization in Home Assistant
+- **Enhanced Probe Reliability**: Comprehensive improvements to probe temperature monitoring and state detection
+- **Robust MQTT Connection**: Improved connection resilience with automatic retry logic for uninterrupted monitoring
 
-![device][deviceimg]
-![lovelace][lovelaceimg]
-![grill][grillimg]
-![probe][probeimg]
+## 🏠 Home Assistant Integration Examples
 
-## Installation (Manual)
+![Device View][deviceimg]
+*Complete device overview showing all available entities and controls*
 
-1. Using the tool of choice open the directory (folder) for your HA configuration (where you find `configuration.yaml`).
-2. If you do not have a `custom_components` directory (folder) there, you need to create it.
-3. In the `custom_components` directory (folder) create a new folder called `traeger`.
-4. Download _all_ the files from the `custom_components/traeger/` directory (folder) in this repository.
-5. Place the files you downloaded in the new directory (folder) you created.
-6. Restart Home Assistant
-7. In the HA UI go to "Configuration" -> "Integrations" click "+" and search for "Traeger"
+![Lovelace Dashboard][lovelaceimg] 
+*Custom dashboard cards for monitoring and controlling your grill*
 
-## Platform Details
-Some of the platforms are fairly self explanatory, others could use a little more explaining. Below are more details on some of those platforms.
+![Grill Climate Control][grillimg]
+*Dual thermostat control for both grill and probe temperatures*
+
+![Probe Monitoring][probeimg]
+*Advanced probe state monitoring with smart alerts*
+
+## 📊 Available Platforms
+
+Platform | Description | Features
+-- | -- | --
+`climate` | Temperature control for grill and probe | Dual thermostats, HVAC modes, preset support
+`sensor` | Temperature readings and status monitoring | Smart heating/cooling detection, probe reliability
+`switch` | Feature toggles and connectivity | SuperSmoke, KeepWarm with conditional availability  
+`number` | Timer control | 1-1440 minute range with Home Assistant integration
+
+## 🚀 Installation
+
+### Option 1: HACS (Recommended)
+
+1. Add this repository to HACS as a custom repository
+2. Search for "Traeger" in HACS
+3. Install the integration
+4. Restart Home Assistant
+5. Go to **Settings** → **Devices & Services** → **Add Integration** → Search for "Traeger"
+
+### Option 2: Manual Installation
+
+1. Download the latest release from the [releases page][releases]
+2. Extract the `custom_components/traeger/` folder to your Home Assistant config directory
+3. Restart Home Assistant
+4. Go to **Settings** → **Devices & Services** → **Add Integration** → Search for "Traeger"
+
+## ⚙️ Configuration
+
+Configuration is handled entirely through the Home Assistant UI:
+
+1. **Add Integration**: Go to Settings → Devices & Services → Add Integration
+2. **Enter Credentials**: Provide your Traeger app username and password
+3. **Select Platform**: Choose your Traeger grill platform
+4. **Automatic Discovery**: The integration will automatically discover and configure entities based on your grill's capabilities
+
+## 🔧 Advanced Features
+
+### Real-Time Communication Architecture
+This integration uses a sophisticated dual-protocol approach:
+- **Commands**: Sent via REST API for reliable execution
+- **State Updates**: Real-time via MQTT WebSocket for instant feedback
+- **Authentication**: AWS Cognito with automatic token refresh
+
+### Smart Entity Management
+- **Feature Detection**: Only creates entities your grill actually supports
+- **Conditional Availability**: Entities automatically enable/disable based on grill state
+- **Intelligent State Logic**: Advanced algorithms for heating/cooling detection
+
+## 📋 Entity Reference
+
 ### Grill State Sensor
-This sensor aligns with the status values in the Traeger app.
+Provides detailed operational status aligned with the Traeger app:
 State | Description
 -- | --
 `offline` | Powered off (or not accesible)
@@ -48,7 +94,7 @@ State | Description
 `unknown` | Unkown state, report to developers
 
 ### Heating State Sensor
-This sensor tries to provide more useful insight into the heating status of the grill. Many of these values can be trigger off of to provide notifications that are not available in the Traeger app.
+Provides intelligent heating status with enhanced logic for automation triggers:
 State | Description
 -- | --
 `idle` | Not in igniting, preheating, cooking or cool_down modes
@@ -61,7 +107,7 @@ State | Description
 `cool_down` | Cool down cycle
 
 ### Probe State Sensor
-This sensor provides triggers for useful probe events such as being close to the target temperature or reaching the target temperature.
+Enhanced probe monitoring with reliability improvements and smart state detection:
 State | Description
 -- | --
 `idle` | Probe target temperature is **not** set (or grill is not in igniting, preheating or cooking modes)
@@ -70,18 +116,40 @@ State | Description
 `at_temp` | Probe alarm has fired
 `fell_out` | Probe probably fell out of the meat (Probe temperature is greater that 215°F)
 
-## Installation (HACS)
+## 🔍 Troubleshooting
 
-1. Add this repository to HACS
-2. Search for Traeger in HACS
+### Common Issues
+- **Connection Issues**: Ensure your Traeger grill is connected to WiFi and accessible via the official app
+- **Authentication Errors**: Verify your username and password match your Traeger account credentials  
+- **Missing Entities**: Some entities only appear when relevant (e.g., probe entities when probe is connected)
+- **State Updates**: If states aren't updating, check your network connection and grill WiFi status
 
-## Configuration is done in the UI
+### Debug Logging
+Add this to your `configuration.yaml` for detailed logs:
+```yaml
+logger:
+  default: info
+  logs:
+    custom_components.traeger: debug
+```
 
-<!---->
+## 🤝 Contributing
 
-## Contributions are welcome!
+Contributions are welcome! Please read the [Contribution Guidelines](CONTRIBUTING.md) for details on:
+- Code style and formatting requirements
+- Development setup with flake8, black, and isort
+- Testing procedures and requirements
+- Pull request process
 
-If you want to contribute to this please read the [Contribution guidelines](CONTRIBUTING.md)
+## 📈 Automation Ideas
+
+This integration enables powerful Home Assistant automations:
+
+- **Temperature Alerts**: Get notified when grill reaches target temperature
+- **Probe Monitoring**: Alerts when meat probe reaches desired doneness
+- **Maintenance Reminders**: Track cook times and suggest cleaning schedules  
+- **Energy Monitoring**: Log cooking sessions and pellet consumption patterns
+- **Smart Notifications**: Context-aware alerts based on cooking state and time
 
 ***
 
