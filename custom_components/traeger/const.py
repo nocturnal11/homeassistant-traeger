@@ -53,6 +53,15 @@ PELLET_OUTAGE_TIME_THRESHOLD = 300  # Time threshold in seconds (5 minutes)
 PELLET_OUTAGE_MIN_TARGET_F = 200  # Only monitor when target temp is at least this high
 PELLET_OUTAGE_MIN_TARGET_C = 93  # Only monitor when target temp is at least this high
 
+# Device Type ID to Model Name Mapping
+DEVICE_TYPE_MAP = {
+    "2104": "Pro 575",
+    # Add more device types as they are discovered
+    # "xxxx": "Pro 780",
+    # "xxxx": "Ironwood 650",
+    # etc.
+}
+
 # Probe Preset Modes
 PROBE_PRESET_MODES = {
     "Chicken": {

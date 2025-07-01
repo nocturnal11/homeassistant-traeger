@@ -3,7 +3,7 @@
 import time
 import logging
 from homeassistant.helpers.entity import Entity
-from .const import DOMAIN, NAME, VERSION, ATTRIBUTION
+from .const import DOMAIN, NAME, VERSION, ATTRIBUTION, DEVICE_TYPE_MAP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,10 +101,14 @@ class TraegerBaseEntity(Entity):
                 "name": grill_name,
                 "manufacturer": NAME,
             }
+        # Map device_type_id to actual model name
+        device_type_id = self.grill_settings.get("device_type_id", "Unknown")
+        model_name = DEVICE_TYPE_MAP.get(device_type_id, device_type_id)
+
         return {
             "identifiers": {(DOMAIN, self.grill_id)},
             "name": grill_name,
-            "model": self.grill_settings.get("device_type_id", "Unknown"),
+            "model": model_name,
             "sw_version": self.grill_settings.get("fw_version", "Unknown"),
             "manufacturer": NAME,
         }
