@@ -716,5 +716,3 @@ class traeger:
             "mqtt_url_remaining": self.mqtt_url_remaining(),
             "token_remaining": self.token_remaining(),
         }
-elf.token_remaining(),
-        }
