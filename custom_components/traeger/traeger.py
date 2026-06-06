@@ -25,7 +25,7 @@ import random
 from homeassistant.const import UnitOfTemperature
 
 
-CLIENT_ID = "2fuohjtqv1e63dckp5v84rau0j"
+CLIENT_ID = "4id473dsrcq4kevlgrikukqn2a"
 TIMEOUT = 60
 
 
@@ -122,6 +122,9 @@ class traeger:
 
     async def get_user_data(self):
         await self.refresh_token()
+        if self.token is None:
+            _LOGGER.error("Cannot get user data: Not authenticated")
+            return None
         return await self.api_wrapper(
             "get",
             "https://mobile-iot-api.iot.traegergrills.io/users/self",
@@ -131,6 +134,9 @@ class traeger:
     async def send_command(self, thingName, command):
         _LOGGER.debug("Send Command Topic: %s, Send Command: %s", thingName, command)
         await self.refresh_token()
+        if self.token is None:
+            _LOGGER.error("Cannot send command: Not authenticated")
+            return
         await self.api_wrapper(
             "post_raw",
             "https://mobile-iot-api.iot.traegergrills.io/things/{}/commands".format(
@@ -184,6 +190,10 @@ class traeger:
 
     async def refresh_mqtt_url(self):
         await self.refresh_token()
+        if self.token is None:
+            _LOGGER.error("Cannot refresh MQTT URL: Not authenticated")
+            return
+
         if self.mqtt_url_remaining() < 60:
             try:
                 mqtt_request_time = time.time()
@@ -245,6 +255,10 @@ class traeger:
     async def get_mqtt_client(self):
         await self.refresh_mqtt_url()
 
+        if self.mqtt_url is None:
+            _LOGGER.error("Cannot initialize MQTT client: URL is None")
+            raise ValueError("MQTT URL is None")
+
         # Close existing client if reconnecting
         if self.mqtt_client is not None:
             _LOGGER.debug("Reinitializing MQTT client")
@@ -283,11 +297,24 @@ class traeger:
 
         try:
             mqtt_parts = urllib.parse.urlparse(self.mqtt_url)
+            host = mqtt_parts.netloc
+            if isinstance(host, bytes):
+                host = host.decode("utf-8")
+            
             headers = {
-                "Host": "{0:s}".format(mqtt_parts.netloc),
+                "Host": host,
             }
+            
+            path = mqtt_parts.path
+            if isinstance(path, bytes):
+                path = path.decode("utf-8")
+            
+            query = mqtt_parts.query
+            if isinstance(query, bytes):
+                query = query.decode("utf-8")
+
             self.mqtt_client.ws_set_options(
-                path="{}?{}".format(mqtt_parts.path, mqtt_parts.query), headers=headers
+                path="{}?{}".format(path, query), headers=headers
             )
 
             _LOGGER.info(
@@ -297,7 +324,7 @@ class traeger:
             self.last_connection_attempt = time.time()
 
             # Set a shorter keepalive for better detection of connection issues
-            self.mqtt_client.connect(mqtt_parts.netloc, 443, keepalive=120)
+            self.mqtt_client.connect(host, 443, keepalive=120)
 
             if not self.mqtt_thread_running:
                 self.mqtt_thread = threading.Thread(target=self._mqtt_connect_func)
@@ -605,10 +632,13 @@ class traeger:
         self, method: str, url: str, data: dict = {}, headers: dict = {}
     ) -> dict:
         """Get information from the API."""
+        # Ensure all header values are strings to prevent aiohttp serialization errors
+        clean_headers = {k: str(v) for k, v in headers.items() if v is not None}
+        
         try:
             async with async_timeout.timeout(TIMEOUT):
                 if method == "get":
-                    response = await self.request.get(url, headers=headers)
+                    response = await self.request.get(url, headers=clean_headers)
                     text = await response.text()
                     try:
                         return json.loads(text)
@@ -622,10 +652,10 @@ class traeger:
                         return None
 
                 if method == "post_raw":
-                    await self.request.post(url, headers=headers, json=data)
+                    await self.request.post(url, headers=clean_headers, json=data)
 
                 elif method == "post":
-                    response = await self.request.post(url, headers=headers, json=data)
+                    response = await self.request.post(url, headers=clean_headers, json=data)
                     text = await response.text()
                     try:
                         return json.loads(text)
