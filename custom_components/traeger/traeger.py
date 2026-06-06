@@ -124,7 +124,7 @@ class traeger:
         await self.refresh_token()
         return await self.api_wrapper(
             "get",
-            "https://mobile-iot-api.iot.traegergrills.io/prod/users/self",
+            "https://mobile-iot-api.iot.traegergrills.io/users/self",
             headers={"authorization": self.token},
         )
 
@@ -133,7 +133,7 @@ class traeger:
         await self.refresh_token()
         await self.api_wrapper(
             "post_raw",
-            "https://mobile-iot-api.iot.traegergrills.io/prod/things/{}/commands".format(
+            "https://mobile-iot-api.iot.traegergrills.io/things/{}/commands".format(
                 thingName
             ),
             data={"command": command},
@@ -165,7 +165,11 @@ class traeger:
 
     async def update_grills(self):
         json = await self.get_user_data()
-        self.grills = json["things"]
+        if json is not None and "things" in json:
+            self.grills = json["things"]
+        else:
+            _LOGGER.error("Failed to update grills: Invalid response from API. Response: %s", json)
+            self.grills = []
 
     def get_grills(self):
         return self.grills
@@ -183,23 +187,26 @@ class traeger:
         if self.mqtt_url_remaining() < 60:
             try:
                 mqtt_request_time = time.time()
-                json = await self.api_wrapper(
+                json_data = await self.api_wrapper(
                     "post",
-                    "https://mobile-iot-api.iot.traegergrills.io/prod/mqtt-connections",
+                    "https://mobile-iot-api.iot.traegergrills.io/mqtt-connections",
                     headers={"Authorization": self.token},
                 )
-                self.mqtt_url_expires = json["expirationSeconds"] + mqtt_request_time
-                self.mqtt_url = json["signedUrl"]
+                if json_data is not None:
+                    self.mqtt_url_expires = json_data["expirationSeconds"] + mqtt_request_time
+                    self.mqtt_url = json_data["signedUrl"]
+                else:
+                    _LOGGER.error("Failed to refresh MQTT URL: API returned no data")
             except KeyError as exception:
                 _LOGGER.error(
                     "Key Error Failed to Parse MQTT URL %s - %s",
-                    json,
+                    json_data,
                     exception,
                 )
             except Exception as exception:
                 _LOGGER.error(
                     "Other Error Failed to Parse MQTT URL %s - %s",
-                    json,
+                    json_data,
                     exception,
                 )
         _LOGGER.debug(f"MQTT URL:{self.mqtt_url} Expires @:{self.mqtt_url_expires}")
@@ -602,16 +609,34 @@ class traeger:
             async with async_timeout.timeout(TIMEOUT):
                 if method == "get":
                     response = await self.request.get(url, headers=headers)
-                    data = await response.read()
-                    return json.loads(data)
+                    text = await response.text()
+                    try:
+                        return json.loads(text)
+                    except json.JSONDecodeError:
+                        _LOGGER.error(
+                            "Failed to decode JSON from %s. Status: %s. Data: %s",
+                            url,
+                            response.status,
+                            text,
+                        )
+                        return None
 
                 if method == "post_raw":
                     await self.request.post(url, headers=headers, json=data)
 
                 elif method == "post":
                     response = await self.request.post(url, headers=headers, json=data)
-                    data = await response.read()
-                    return json.loads(data)
+                    text = await response.text()
+                    try:
+                        return json.loads(text)
+                    except json.JSONDecodeError:
+                        _LOGGER.error(
+                            "Failed to decode JSON from %s. Status: %s. Data: %s",
+                            url,
+                            response.status,
+                            text,
+                        )
+                        return None
 
         except asyncio.TimeoutError as exception:
             _LOGGER.error(
