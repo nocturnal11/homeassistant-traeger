@@ -42,11 +42,8 @@ class PelletOutageSensor(BinarySensorEntity, TraegerBaseEntity):
     """Binary sensor to detect pellet outage based on temperature drop patterns."""
 
     def __init__(self, client, grill_id, config_entry):
-        super().__init__(client, grill_id)
-        self.grill_register_callback()
-        self._config_entry = config_entry
-
-        # State tracking for pellet outage detection
+        # State tracking for pellet outage detection must be initialized before super().__init__
+        # because TraegerBaseEntity calls grill_refresh_state() which uses these attributes.
         self._temp_history = []  # List of (timestamp, temp, target_temp) tuples
         self._pellet_outage_detected = False
         self._last_check_time = time.time()
@@ -56,6 +53,10 @@ class PelletOutageSensor(BinarySensorEntity, TraegerBaseEntity):
             GRILL_MODE_PREHEATING,
             GRILL_MODE_IGNITING,
         ]
+        
+        super().__init__(client, grill_id)
+        self.grill_register_callback()
+        self._config_entry = config_entry
 
     def _get_temp_drop_threshold(self):
         """Get the temperature drop threshold from config or default."""

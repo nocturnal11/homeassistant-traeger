@@ -101,9 +101,9 @@ class TraegerBaseEntity(Entity):
                 "name": grill_name,
                 "manufacturer": NAME,
             }
-        # Map device_type_id to actual model name
+        # Map device_type_id to actual model name and ensure it's a string
         device_type_id = self.grill_settings.get("device_type_id", "Unknown")
-        model_name = DEVICE_TYPE_MAP.get(device_type_id, device_type_id)
+        model_name = str(DEVICE_TYPE_MAP.get(device_type_id, device_type_id))
 
         return {
             "identifiers": {(DOMAIN, self.grill_id)},
