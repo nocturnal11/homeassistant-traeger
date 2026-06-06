@@ -124,7 +124,7 @@ class traeger:
         await self.refresh_token()
         return await self.api_wrapper(
             "get",
-            "https://1ywgyc65d1.execute-api.us-west-2.amazonaws.com/prod/users/self",
+            "https://mobile-iot-api.iot.traegergrills.io/prod/users/self",
             headers={"authorization": self.token},
         )
 
@@ -133,7 +133,7 @@ class traeger:
         await self.refresh_token()
         await self.api_wrapper(
             "post_raw",
-            "https://1ywgyc65d1.execute-api.us-west-2.amazonaws.com/prod/things/{}/commands".format(
+            "https://mobile-iot-api.iot.traegergrills.io/prod/things/{}/commands".format(
                 thingName
             ),
             data={"command": command},
@@ -185,7 +185,7 @@ class traeger:
                 mqtt_request_time = time.time()
                 json = await self.api_wrapper(
                     "post",
-                    "https://1ywgyc65d1.execute-api.us-west-2.amazonaws.com/prod/mqtt-connections",
+                    "https://mobile-iot-api.iot.traegergrills.io/prod/mqtt-connections",
                     headers={"Authorization": self.token},
                 )
                 self.mqtt_url_expires = json["expirationSeconds"] + mqtt_request_time
@@ -690,4 +690,6 @@ class traeger:
             "mqtt_url_expires": self.mqtt_url_expires,
             "mqtt_url_remaining": self.mqtt_url_remaining(),
             "token_remaining": self.token_remaining(),
+        }
+elf.token_remaining(),
         }
