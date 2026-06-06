@@ -93,10 +93,32 @@ class traeger:
         if self.token_remaining() < 60:
             request_time = time.time()
             response = await self.do_cognito()
-            self.token_expires = (
-                response["AuthenticationResult"]["ExpiresIn"] + request_time
-            )
-            self.token = response["AuthenticationResult"]["IdToken"]
+            if response is None:
+                _LOGGER.error("Traeger Cognito response was None")
+                return
+
+            if "AuthenticationResult" in response:
+                self.token_expires = (
+                    response["AuthenticationResult"]["ExpiresIn"] + request_time
+                )
+                self.token = response["AuthenticationResult"]["IdToken"]
+                _LOGGER.debug("Traeger token refreshed successfully")
+            elif "ChallengeName" in response:
+                _LOGGER.error(
+                    "Traeger authentication challenge required: %s. Response: %s",
+                    response["ChallengeName"],
+                    response
+                )
+            elif "__type" in response and "NotAuthorizedException" in response["__type"]:
+                _LOGGER.error(
+                    "Traeger authentication failed: Invalid username or password. Response: %s",
+                    response
+                )
+            else:
+                _LOGGER.error(
+                    "Traeger authentication failed: 'AuthenticationResult' not found in response. Response: %s",
+                    response
+                )
 
     async def get_user_data(self):
         await self.refresh_token()
